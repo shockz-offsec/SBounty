@@ -83,6 +83,12 @@ burpcollaborator="" # https://xx.yy.zz
 ```
 
 <div align="center">
+  <h2>Example</h2>
+</div>
+
+![Example](https://github.com/shockz-offsec/SBounty/assets/67438760/97dc14da-2a71-4ced-957a-1c0e5b32a9f4)
+
+<div align="center">
   <h2>Disclaimer</h2>
 </div>
 
