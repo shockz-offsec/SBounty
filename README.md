@@ -2,7 +2,7 @@
   <h1>SBounty</h1>
 </div>
 
-Sbounty is a script that leverages a combination of tools developed in bash and golang to create pipelines aimed at detecting vulnerabilities in web applications.
+Sbounty is a script that leverages a combination of tools developed in bash and golang to create pipelines aimed at detecting vulnerabilities in no authenticated web applications.
 
 This tool analyzes the routes obtained from a given URL in order to identify potential vulnerabilities, including XSS, SQLi, CORS, LFI, SSTI, Open Redirect, and SSRF.
 
@@ -32,7 +32,8 @@ chmod +x sbounty.sh
 * freq
 * subjack
 * httpx
-* gauplus
+* gau
+* hakrawler
 * uro
 
 
@@ -41,20 +42,22 @@ chmod +x sbounty.sh
 </div>
 
 ```bash
-Usage: ./sbounty.sh [-s subdomain] [-t] 
+Usage: ./sbounty.sh [-f urls_file] [-s subdomain] [-t] 
+**THIS TOOL ONLY WORKS With No-Authenticated websites**
  
  TARGET OPTIONS
-   -s subdomain      Target subdomain
+   -s subdomain      Live Target subdomain
+   -f file           Urls file (Local Target)
  
  MODE OPTIONS
-   -t                Subdomain Takeover - Perform a subdomain takeover check
+   -t                Live Subdomain Takeover - Perform a subdomain takeover check
    -h                Help - Show this help
  
  USAGE EXAMPLES
+ ./sbounty.sh -f urls.txt
  ./sbounty.sh -s tesla.com
  ./sbounty.sh -s www.tesla.com
  ./sbounty.sh -s https://www.tesla.com
- ./sbounty.sh -s 127.0.0.1:8080
  
  Subdomain Takeover check:
  ./sbounty.sh -s www.tesla.com -t 

