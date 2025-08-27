@@ -178,7 +178,7 @@ function cors(){
     while read url; do 
         for payload in "${payloads[@]}"; do 
             response=$(curl -s -I -H "Origin: ${url}${payload}.evil.com" -X GET "$url")
-            if echo "$response" | grep -q "${url}${payload}.evil.com"; then 
+            if echo "$response" | grep -F -q "${url}${payload}.evil.com"; then 
                 printf "${bred}[Potential CORS Found] $url ${reset}\n" | tee -a "$output"
                 found=true
             fi
@@ -190,20 +190,30 @@ function cors(){
 }
 
 ## LFI
-function lfi(){
+function lfi() {
+    script_dir="$(dirname "$0")"
+    payloads_file="$script_dir/lfi_payloads.txt"
     output="$results_path/lfi.txt"
     output_urls="$results_path/lfi_urls.txt"
     > "$output"
+    > "$output_urls"
     found=false
     printf "\n${bblue}[**]${reset} LFI ${bblue}[**]${reset}\n"
-    gf lfi < "$urls_output_path" | qsreplace "../../../../../../../../etc/passwd" >> "$output_urls"
-    while read url; do 
-        if curl --header "$headers" -s "$url" 2>&1 | grep -q "root:x"; then 
+
+    # Iterar sobre cada payload
+    while read -r payload; do
+        gf lfi < "$urls_output_path" | qsreplace "$payload" >> "$output_urls"
+    done < "$payloads_file"
+
+    # Verificar URLs
+    while read -r url; do
+        if curl --header "$headers" -s "$url" 2>&1 | grep -q "root:x"; then
             printf "${bred}VULN! $url${reset}\n" >> "$output"
             found=true
         fi
     done < "$output_urls"
-    if ! $found;then
+
+    if ! $found; then
         printf "\n${byellow}[!]${reset} Sorry, Nothing found :(\n"
     fi
 }
@@ -318,10 +328,48 @@ install
 if [ ! -d "$results_path" ]; then mkdir -p "$results_path"; fi
 printf "${bgreen}[*]${reset} Here we go buddy!!\n"
 
+
 if [ -n "$subdomain" ]; then
-    printf "${bgreen}[*]${reset} Crawling and Finding URL's...\n"
-    gau "$subdomain" --threads 10 2> /dev/null | uro | httpx -silent -threads 100 > "$urls_output_path"
-    echo "$subdomain" | hakrawler -d 5 -insecure | uro >> "$urls_output_path"
+    urls_output_path="$results_path/urls.txt"
+
+    if [ -f "$urls_output_path" ]; then
+        printf "${byellow}[*]${reset} URLs file already exists, skipping crawling.\n"
+    else
+    {
+        gau "$subdomain" --threads 10 2>/dev/null
+        waybackurls "$subdomain" 2>/dev/null
+        katana -u "$subdomain" -silent -jc -d 3 2>/dev/null
+        echo "$subdomain" | hakrawler -d 3 -insecure 2>/dev/null
+    } | uro | sort -u \
+      | grep -E "^https?://([a-z0-9.-]*\.)?$subdomain" \
+      > "$urls_output_path"
+
+    # Añadir URLs vía APIs
+    api_urls() {
+        echo "[*] Fetching URLs via APIs..."
+        {
+            # OTX API
+            if [ -n "$otx_api_key" ]; then
+                curl -s -H "X-OTX-API-KEY: $otx_api_key" \
+                    "https://otx.alienvault.com/api/v1/indicators/domain/$subdomain/url_list?limit=100&page=1" \
+                | jq -r '.url_list[].url' 2>/dev/null
+            fi
+
+            # URLSCAN API
+            if [ -n "$urlscan_api_key" ]; then
+                curl -s -H "API-Key: $urlscan_api_key" \
+                    "https://urlscan.io/api/v1/search/?q=domain:$subdomain" \
+                | jq -r '.results[].page.url' 2>/dev/null
+            fi
+        } | uro | sort -u \
+          | grep -E "^https?://([a-z0-9.-]*\.)?$subdomain" \
+          >> "$urls_output_path"
+    }
+
+    api_urls
+    fi
+else
+    urls_output_path="$urls_file"
 fi
 
 test "$xss" = "true" && reflected_xss
